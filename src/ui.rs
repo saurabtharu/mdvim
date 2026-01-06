@@ -25,6 +25,14 @@ pub fn render_ui(f: &mut Frame, app: &mut App) {
             .split(area)
     };
 
+    // Remember layout sizes for mouse-based resizing.
+    app.last_area_width = area.width;
+    if app.show_tree {
+        app.last_tree_width_px = chunks[0].width;
+    } else {
+        app.last_tree_width_px = area.width;
+    }
+
     let rendered = markdown_to_ratatui(&app.markdown);
     let line_count = rendered.lines.len() as u16;
 

@@ -20,6 +20,12 @@ pub struct App {
     pub focused_pane: FocusedPane,
     /// Percentage of the screen width used by the file tree (10–80).
     pub tree_width_percentage: u16,
+    /// Last rendered terminal width (columns) so mouse resizing can map pixels to %.
+    pub last_area_width: u16,
+    /// Last rendered tree width in columns.
+    pub last_tree_width_px: u16,
+    /// Whether the user is currently dragging the tree/preview divider.
+    pub dragging_divider: bool,
 }
 
 impl App {
@@ -43,6 +49,9 @@ impl App {
             last_key: None,
             focused_pane: FocusedPane::FileTree,
             tree_width_percentage: 20,
+            last_area_width: 0,
+            last_tree_width_px: 0,
+            dragging_divider: false,
         }
     }
 
@@ -55,9 +64,9 @@ impl App {
         if !self.show_tree {
             // When the tree is hidden, always treat the preview as focused.
             self.focused_pane = FocusedPane::Preview;
-        } else if self.focused_pane == FocusedPane::Preview {
-            // When re-showing the tree without an explicit focus change, keep preview focused.
-            self.focused_pane = FocusedPane::Preview;
+        } else {
+            // When showing the tree, focus it by default.
+            self.focused_pane = FocusedPane::FileTree;
         }
     }
 
@@ -86,14 +95,34 @@ impl App {
     pub fn increase_tree_width(&mut self) {
         if self.show_tree {
             // Clamp to avoid too small/too large tree.
-            self.tree_width_percentage = (self.tree_width_percentage + 5).min(80);
+            self.tree_width_percentage = (self.tree_width_percentage + 2).min(80);
         }
     }
 
     pub fn decrease_tree_width(&mut self) {
         if self.show_tree {
-            self.tree_width_percentage = self.tree_width_percentage.saturating_sub(5).max(10);
+            self.tree_width_percentage = self.tree_width_percentage.saturating_sub(2).max(10);
         }
+    }
+
+    pub fn set_tree_width_from_column(&mut self, column: u16) {
+        if !self.show_tree || self.last_area_width == 0 {
+            return;
+        }
+
+        let clamped_column = column.min(self.last_area_width);
+        let new_pct = ((clamped_column as u32 * 100) / self.last_area_width as u32) as u16;
+        self.tree_width_percentage = new_pct.clamp(10, 80);
+    }
+
+    pub fn begin_divider_drag(&mut self) {
+        if self.show_tree {
+            self.dragging_divider = true;
+        }
+    }
+
+    pub fn end_divider_drag(&mut self) {
+        self.dragging_divider = false;
     }
 
     pub fn next_file(&mut self) {
@@ -139,6 +168,8 @@ impl App {
                 self.markdown =
                     fs::read_to_string(file).unwrap_or_else(|_| "Unable to read file".to_string());
                 self.scroll_offset = 0;
+                // After opening a file, shift focus to the preview.
+                self.focus_preview();
             }
         }
         self.last_key = None;

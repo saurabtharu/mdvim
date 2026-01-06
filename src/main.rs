@@ -7,7 +7,8 @@ use std::io;
 
 use crossterm::{
     event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseEventKind,
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseButton,
+        MouseEventKind,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -144,15 +145,45 @@ fn main() -> Result<(), io::Error> {
                     }
                 }
             }
-            Event::Mouse(mouse) => match mouse.kind {
-                MouseEventKind::ScrollDown => {
-                    app.scroll_down(3);
+            Event::Mouse(mouse) => {
+                match mouse.kind {
+                    MouseEventKind::ScrollDown => {
+                        app.scroll_down(3);
+                    }
+                    MouseEventKind::ScrollUp => {
+                        app.scroll_up(3);
+                    }
+                    MouseEventKind::Down(MouseButton::Left) => {
+                        // Start dragging if click is near the divider
+                        if app.show_tree {
+                            let divider_x = app.last_tree_width_px;
+                            if divider_x > 0 {
+                                let col = mouse.column;
+                                let diff = if col > divider_x {
+                                    col - divider_x
+                                } else {
+                                    divider_x - col
+                                };
+                                if diff <= 1 {
+                                    app.begin_divider_drag();
+                                }
+                            }
+                        }
+                    }
+                    MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Moved => {
+                        if app.dragging_divider {
+                            app.set_tree_width_from_column(mouse.column);
+                        }
+                    }
+                    MouseEventKind::Up(MouseButton::Left) => {
+                        if app.dragging_divider {
+                            app.set_tree_width_from_column(mouse.column);
+                            app.end_divider_drag();
+                        }
+                    }
+                    _ => {}
                 }
-                MouseEventKind::ScrollUp => {
-                    app.scroll_up(3);
-                }
-                _ => {}
-            },
+            }
             _ => {}
         }
     }
