@@ -331,30 +331,50 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
                         };
                         style = style.fg(color).add_modifier(Modifier::BOLD);
                     } else {
+                        // Build modifiers and colors based on active formatting
+                        let mut modifiers = Modifier::empty();
+                        let mut text_color = Color::White;
+                        
                         if bold {
-                            style = style
-                                .fg(Color::Rgb(255, 218, 185))
-                                .add_modifier(Modifier::BOLD);
+                            modifiers |= Modifier::BOLD;
+                            text_color = Color::Rgb(255, 218, 185);
                         }
                         if italic {
-                            style = style
-                                .fg(Color::Rgb(221, 160, 221))
-                                .add_modifier(Modifier::ITALIC);
+                            modifiers |= Modifier::ITALIC;
+                            if !bold {
+                                text_color = Color::Rgb(221, 160, 221);
+                            }
                         }
                         if strikethrough {
-                            style = style
-                                .fg(Color::Rgb(169, 169, 169))
-                                .add_modifier(Modifier::CROSSED_OUT);
+                            modifiers |= Modifier::CROSSED_OUT;
+                            text_color = Color::Rgb(169, 169, 169);
                         }
                         if superscript {
-                            style = style.fg(Color::LightCyan).add_modifier(Modifier::DIM);
+                            modifiers |= Modifier::DIM;
+                            if !strikethrough {
+                                text_color = Color::LightCyan;
+                            }
                         }
                         if subscript {
-                            style = style.fg(Color::LightMagenta).add_modifier(Modifier::DIM);
+                            modifiers |= Modifier::DIM;
+                            if !strikethrough && !superscript {
+                                text_color = Color::LightMagenta;
+                            }
                         }
+                        
+                        style = style.fg(text_color).add_modifier(modifiers);
                     }
 
-                    let text_span = Span::styled(text.to_string(), style);
+                    // Format text for superscript/subscript display
+                    let display_text = if superscript && !in_heading {
+                        format!("^{}", text)
+                    } else if subscript && !in_heading {
+                        format!("_{}", text)
+                    } else {
+                        text.to_string()
+                    };
+
+                    let text_span = Span::styled(display_text, style);
                     if in_table {
                         current_cell.push(text_span);
                     } else {
@@ -469,6 +489,11 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
             }
 
             MdEvent::End(TagEnd::TableHead) => {
+                // If we're ending the header section and haven't stored headers yet, store them now
+                // This handles the case where headers might not have been stored in End(TableRow)
+                if is_header_row && table_headers.is_empty() && !current_row.is_empty() {
+                    table_headers = std::mem::take(&mut current_row);
+                }
                 is_header_row = false;
             }
 
@@ -478,6 +503,8 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
 
             MdEvent::End(TagEnd::TableRow) => {
                 if is_header_row {
+                    // Always store header row - in standard markdown there's only one header row
+                    // Even if cells are empty, we need to store the structure
                     table_headers = std::mem::take(&mut current_row);
                 } else if !current_row.is_empty() {
                     table_rows.push(std::mem::take(&mut current_row));
@@ -549,16 +576,17 @@ fn render_table(
     let border_color = Color::Rgb(135, 206, 250);
     lines.push(Line::default());
 
-    // Headers
-    if !headers.is_empty() {
+    // Always render headers if we have a column count (headers should always exist in markdown tables)
+    if col_count > 0 {
         let mut header_line: Vec<Span<'static>> = vec![Span::raw("  ")];
         let header_style = Style::default()
             .fg(Color::Rgb(255, 182, 193))
             .add_modifier(Modifier::BOLD);
 
-        for (i, cell) in headers.iter().enumerate() {
+        for i in 0..col_count {
+            let cell = headers.get(i).cloned().unwrap_or_default();
             let mut formatted = format_cell_spans(
-                cell,
+                &cell,
                 col_widths[i],
                 alignments.get(i).unwrap_or(&Alignment::None),
             );
@@ -567,14 +595,14 @@ fn render_table(
             }
             header_line.extend(formatted);
 
-            if i < headers.len() - 1 {
+            if i < col_count - 1 {
                 header_line.push(Span::styled(" │ ", Style::default().fg(border_color)));
             }
         }
         lines.push(Line::from(header_line));
 
-        // Separator
-        let mut sep: Vec<Span<'static>> = vec![Span::raw(" ")];
+        // Separator - must match header line indentation
+        let mut sep: Vec<Span<'static>> = vec![Span::raw("  ")];
         for (i, &width) in col_widths.iter().enumerate() {
             sep.push(Span::styled(
                 "─".repeat(width),
@@ -587,9 +615,9 @@ fn render_table(
         lines.push(Line::from(sep));
     }
 
-    // Rows
+    // Rows - must match header line indentation
     for row in rows {
-        let mut row_line: Vec<Span<'static>> = vec![Span::raw(" ")];
+        let mut row_line: Vec<Span<'static>> = vec![Span::raw("  ")];
         for i in 0..col_count {
             let cell = row.get(i).cloned().unwrap_or_default();
             let formatted = format_cell_spans(
