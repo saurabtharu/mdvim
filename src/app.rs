@@ -1,6 +1,13 @@
 use std::fs;
 use std::path::PathBuf;
 
+/// Which pane currently has focus for navigation/scrolling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FocusedPane {
+    FileTree,
+    Preview,
+}
+
 pub struct App {
     pub files: Vec<PathBuf>,
     pub selected: usize,
@@ -9,6 +16,10 @@ pub struct App {
     pub scroll_offset: u16,
     pub max_scroll: u16,
     pub last_key: Option<char>,
+    /// Which pane is currently focused when the tree is visible.
+    pub focused_pane: FocusedPane,
+    /// Percentage of the screen width used by the file tree (10–80).
+    pub tree_width_percentage: u16,
 }
 
 impl App {
@@ -30,6 +41,8 @@ impl App {
             scroll_offset: 0,
             max_scroll: 0,
             last_key: None,
+            focused_pane: FocusedPane::FileTree,
+            tree_width_percentage: 20,
         }
     }
 
@@ -39,6 +52,48 @@ impl App {
 
     pub fn toggle_tree(&mut self) {
         self.show_tree = !self.show_tree;
+        if !self.show_tree {
+            // When the tree is hidden, always treat the preview as focused.
+            self.focused_pane = FocusedPane::Preview;
+        } else if self.focused_pane == FocusedPane::Preview {
+            // When re-showing the tree without an explicit focus change, keep preview focused.
+            self.focused_pane = FocusedPane::Preview;
+        }
+    }
+
+    pub fn toggle_focus(&mut self) {
+        if !self.show_tree {
+            // Only the preview is visible.
+            self.focused_pane = FocusedPane::Preview;
+            return;
+        }
+        self.focused_pane = match self.focused_pane {
+            FocusedPane::FileTree => FocusedPane::Preview,
+            FocusedPane::Preview => FocusedPane::FileTree,
+        };
+    }
+
+    pub fn focus_tree(&mut self) {
+        if self.show_tree {
+            self.focused_pane = FocusedPane::FileTree;
+        }
+    }
+
+    pub fn focus_preview(&mut self) {
+        self.focused_pane = FocusedPane::Preview;
+    }
+
+    pub fn increase_tree_width(&mut self) {
+        if self.show_tree {
+            // Clamp to avoid too small/too large tree.
+            self.tree_width_percentage = (self.tree_width_percentage + 5).min(80);
+        }
+    }
+
+    pub fn decrease_tree_width(&mut self) {
+        if self.show_tree {
+            self.tree_width_percentage = self.tree_width_percentage.saturating_sub(5).max(10);
+        }
     }
 
     pub fn next_file(&mut self) {

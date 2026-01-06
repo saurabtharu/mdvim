@@ -29,84 +29,122 @@ fn main() -> Result<(), io::Error> {
     loop {
         terminal.draw(|f| render_ui(f, &mut app))?;
 
-        if let Event::Key(key) = event::read()? {
-            match key.code {
-                KeyCode::Char('q') => break,
+        let evt = event::read()?;
 
-                KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.toggle_tree();
-                }
+        match evt {
+            Event::Key(key) => {
+                let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 
-                KeyCode::Char('t') => {
-                    app.toggle_tree();
-                }
+                match key.code {
+                    KeyCode::Char('q') => break,
 
-                KeyCode::Char('g') => {
-                    if app.last_key == Some('g') {
+                    // Toggle file tree visibility
+                    KeyCode::Char('n') if ctrl => {
+                        app.toggle_tree();
+                    }
+
+                    KeyCode::Char('t') => {
+                        app.toggle_tree();
+                    }
+
+                    // Focus movement: Ctrl+h (tree), Ctrl+l (preview)
+                    KeyCode::Char('h') if ctrl => {
+                        app.focus_tree();
+                    }
+
+                    KeyCode::Char('l') if ctrl => {
+                        app.focus_preview();
+                    }
+
+                    // Ctrl+ww (like vim: toggle focus between panes)
+                    KeyCode::Char('w') if ctrl => {
+                        if app.last_key == Some('w') {
+                            app.toggle_focus();
+                            app.last_key = None;
+                        } else {
+                            app.last_key = Some('w');
+                        }
+                    }
+
+                    // Vim-style gg / G navigation in preview
+                    KeyCode::Char('g') => {
+                        if app.last_key == Some('g') {
+                            app.scroll_to_top();
+                        } else {
+                            app.last_key = Some('g');
+                        }
+                    }
+
+                    KeyCode::Char('G') => {
+                        app.scroll_to_bottom();
+                    }
+
+                    // j / k depending on which pane is focused
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        if app.show_tree && matches!(app.focused_pane, app::FocusedPane::FileTree) {
+                            app.next_file();
+                        } else {
+                            app.scroll_down(1);
+                        }
+                    }
+
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        if app.show_tree && matches!(app.focused_pane, app::FocusedPane::FileTree) {
+                            app.prev_file();
+                        } else {
+                            app.scroll_up(1);
+                        }
+                    }
+
+                    // Faster scrolling
+                    KeyCode::Char('d') if ctrl => {
+                        app.scroll_down(10);
+                    }
+
+                    KeyCode::Char('u') if ctrl => {
+                        app.scroll_up(10);
+                    }
+
+                    KeyCode::PageDown => {
+                        app.scroll_down(20);
+                    }
+
+                    KeyCode::PageUp => {
+                        app.scroll_up(20);
+                    }
+
+                    KeyCode::Home => {
                         app.scroll_to_top();
-                    } else {
-                        app.last_key = Some('g');
+                    }
+
+                    KeyCode::End => {
+                        app.scroll_to_bottom();
+                    }
+
+                    // Open file from tree (only when visible)
+                    KeyCode::Enter if app.show_tree => {
+                        app.open_selected_file();
+                    }
+
+                    KeyCode::Char('o') if app.show_tree => {
+                        app.open_selected_file();
+                    }
+
+                    // Resize tree: Ctrl+Left shrink, Ctrl+Right grow
+                    KeyCode::Left if ctrl => {
+                        app.decrease_tree_width();
+                    }
+
+                    KeyCode::Right if ctrl => {
+                        app.increase_tree_width();
+                    }
+
+                    _ => {
+                        app.last_key = None;
                     }
                 }
-
-                KeyCode::Char('G') => {
-                    app.scroll_to_bottom();
-                }
-
-                KeyCode::Char('j') | KeyCode::Down if app.show_tree => {
-                    app.next_file();
-                }
-
-                KeyCode::Char('k') | KeyCode::Up if app.show_tree => {
-                    app.prev_file();
-                }
-
-                KeyCode::Char('j') | KeyCode::Down if !app.show_tree => {
-                    app.scroll_down(1);
-                }
-
-                KeyCode::Char('k') | KeyCode::Up if !app.show_tree => {
-                    app.scroll_up(1);
-                }
-
-                KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.scroll_down(10);
-                }
-
-                KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.scroll_up(10);
-                }
-
-                KeyCode::PageDown => {
-                    app.scroll_down(20);
-                }
-
-                KeyCode::PageUp => {
-                    app.scroll_up(20);
-                }
-
-                KeyCode::Home => {
-                    app.scroll_to_top();
-                }
-
-                KeyCode::End => {
-                    app.scroll_to_bottom();
-                }
-
-                KeyCode::Enter if app.show_tree => {
-                    app.open_selected_file();
-                }
-
-                KeyCode::Char('o') if app.show_tree => {
-                    app.open_selected_file();
-                }
-
-                _ => {
-                    app.last_key = None;
-                }
             }
-        } else if let Event::Mouse(mouse) = event::read()? {
-            match mouse.kind {
+            Event::Mouse(mouse) => match mouse.kind {
                 MouseEventKind::ScrollDown => {
                     app.scroll_down(3);
                 }
@@ -114,7 +152,8 @@ fn main() -> Result<(), io::Error> {
                     app.scroll_up(3);
                 }
                 _ => {}
-            }
+            },
+            _ => {}
         }
     }
 
