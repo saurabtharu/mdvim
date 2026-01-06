@@ -26,15 +26,26 @@ pub struct App {
     pub last_tree_width_px: u16,
     /// Whether the user is currently dragging the tree/preview divider.
     pub dragging_divider: bool,
+    /// Last mouse click time for double-click detection (milliseconds since epoch).
+    pub last_click_time: Option<u64>,
+    /// Last clicked file index for double-click detection.
+    pub last_clicked_file: Option<usize>,
 }
 
 impl App {
     pub fn new() -> Self {
-        let files = fs::read_dir(".")
+        let mut files: Vec<PathBuf> = fs::read_dir(".")
             .unwrap()
             .filter_map(|e| e.ok())
             .map(|e| e.path())
             .collect();
+        
+        // Sort files by name (case-insensitive)
+        files.sort_by(|a, b| {
+            let a_name = a.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+            let b_name = b.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+            a_name.cmp(&b_name)
+        });
 
         let markdown =
             fs::read_to_string("README.md").unwrap_or_else(|_| "No README.md found".to_string());
@@ -52,6 +63,8 @@ impl App {
             last_area_width: 0,
             last_tree_width_px: 0,
             dragging_divider: false,
+            last_click_time: None,
+            last_clicked_file: None,
         }
     }
 
@@ -177,5 +190,63 @@ impl App {
 
     pub fn update_max_scroll(&mut self, line_count: u16, viewport_height: u16) {
         self.max_scroll = line_count.saturating_sub(viewport_height);
+    }
+
+    /// Select a file by index (for mouse clicks)
+    pub fn select_file_by_index(&mut self, index: usize) {
+        if index < self.files.len() {
+            self.selected = index;
+            self.last_key = None;
+        }
+    }
+
+    /// Get the file index at a given row position in the tree view
+    pub fn get_file_index_at_row(&self, row: u16, tree_start_row: u16) -> Option<usize> {
+        if row < tree_start_row {
+            return None;
+        }
+        let index = (row - tree_start_row) as usize;
+        if index < self.files.len() {
+            Some(index)
+        } else {
+            None
+        }
+    }
+
+    /// Handle mouse click on file tree
+    pub fn handle_tree_click(&mut self, row: u16, tree_start_row: u16, current_time_ms: u64) -> bool {
+        // Focus tree view
+        self.focus_tree();
+        
+        // Check if clicking on a file
+        if let Some(index) = self.get_file_index_at_row(row, tree_start_row) {
+            // Check for double-click (within 500ms and same file)
+            if let Some(last_time) = self.last_click_time {
+                if let Some(last_file) = self.last_clicked_file {
+                    if last_file == index && current_time_ms.saturating_sub(last_time) < 500 {
+                        // Double-click detected
+                        self.select_file_by_index(index);
+                        self.open_selected_file();
+                        self.last_click_time = None;
+                        self.last_clicked_file = None;
+                        return true; // File was opened
+                    }
+                }
+            }
+            
+            // Single click - select file
+            self.select_file_by_index(index);
+            self.last_click_time = Some(current_time_ms);
+            self.last_clicked_file = Some(index);
+        }
+        false // File was not opened
+    }
+
+    /// Handle mouse click on preview pane
+    pub fn handle_preview_click(&mut self) {
+        self.focus_preview();
+        // Reset double-click tracking when clicking preview
+        self.last_click_time = None;
+        self.last_clicked_file = None;
     }
 }

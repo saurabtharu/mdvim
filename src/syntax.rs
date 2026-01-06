@@ -228,6 +228,84 @@ pub fn get_syntax_color(token: &str, lang: &str) -> Color {
                 Color::White
             }
         }
+        "bash" | "sh" | "shell" => {
+            if matches!(
+                token,
+                "if" | "then" | "else" | "elif" | "fi" | "for" | "while" | "do" | "done"
+                    | "case" | "esac" | "function" | "return" | "export" | "local" | "readonly"
+                    | "echo" | "printf" | "test" | "[" | "]" | "true" | "false"
+            ) {
+                Color::LightMagenta
+            } else if token.starts_with('"') || token.starts_with('\'') || token.starts_with('$') {
+                Color::LightGreen
+            } else if token.starts_with('#') {
+                Color::DarkGray
+            } else if token.chars().all(|c| c.is_numeric() || c == '.') {
+                Color::LightCyan
+            } else {
+                Color::White
+            }
+        }
+        "yaml" | "yml" => {
+            if token.starts_with('#') {
+                Color::DarkGray
+            } else if token.starts_with('"') || token.starts_with('\'') {
+                Color::LightGreen
+            } else if token.ends_with(':') {
+                Color::LightMagenta
+            } else {
+                Color::White
+            }
+        }
+        "json" => {
+            if token.starts_with('"') {
+                Color::LightGreen
+            } else if matches!(token, "true" | "false" | "null") {
+                Color::LightMagenta
+            } else if token.chars().all(|c| c.is_numeric() || c == '.' || c == '-' || c == 'e' || c == 'E') {
+                Color::LightCyan
+            } else {
+                Color::White
+            }
+        }
+        "html" | "xml" => {
+            if token.starts_with('<') || token.starts_with("</") {
+                Color::LightMagenta
+            } else if token.starts_with('"') || token.starts_with('\'') {
+                Color::LightGreen
+            } else {
+                Color::White
+            }
+        }
+        "css" => {
+            if token.ends_with(':') || token.ends_with(';') {
+                Color::LightMagenta
+            } else if token.starts_with('#') || token.starts_with('.') {
+                Color::LightCyan
+            } else if token.starts_with('"') || token.starts_with('\'') {
+                Color::LightGreen
+            } else {
+                Color::White
+            }
+        }
+        "sql" => {
+            if matches!(
+                token,
+                "SELECT" | "FROM" | "WHERE" | "INSERT" | "UPDATE" | "DELETE" | "CREATE"
+                    | "DROP" | "ALTER" | "TABLE" | "INDEX" | "VIEW" | "JOIN" | "INNER"
+                    | "LEFT" | "RIGHT" | "OUTER" | "ON" | "GROUP" | "BY" | "ORDER"
+                    | "HAVING" | "AS" | "AND" | "OR" | "NOT" | "NULL" | "IS" | "IN"
+                    | "LIKE" | "BETWEEN" | "EXISTS" | "UNION" | "DISTINCT" | "LIMIT"
+            ) {
+                Color::LightMagenta
+            } else if token.starts_with('"') || token.starts_with('\'') {
+                Color::LightGreen
+            } else if token.starts_with("--") || token.starts_with("/*") {
+                Color::DarkGray
+            } else {
+                Color::White
+            }
+        }
         _ => Color::White,
     }
 }
@@ -237,8 +315,30 @@ pub fn highlight_code_line(line: &str, lang: &str) -> Vec<Span<'static>> {
     let mut current_token = String::new();
     let mut in_string = false;
     let mut string_char = ' ';
+    let mut in_comment = false;
 
-    for ch in line.chars() {
+    // Determine comment style based on language
+    let comment_style = match lang {
+        "bash" | "sh" | "shell" | "python" | "py" | "yaml" | "yml" => "#",
+        _ => "//", // Default to // for most languages
+    };
+
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        let ch = chars[i];
+        
+        if in_comment {
+            // Everything after comment marker is grey
+            let comment_text: String = chars[i..].iter().collect();
+            spans.push(Span::styled(
+                comment_text,
+                Style::default().fg(Color::DarkGray),
+            ));
+            break; // Rest of line is comment
+        }
+
         if in_string {
             current_token.push(ch);
             if ch == string_char
@@ -264,6 +364,42 @@ pub fn highlight_code_line(line: &str, lang: &str) -> Vec<Span<'static>> {
             in_string = true;
             string_char = ch;
             current_token.push(ch);
+        } else if comment_style == "//" && i + 1 < chars.len() && ch == '/' && chars[i + 1] == '/' {
+            // Found // comment
+            if !current_token.is_empty() {
+                let color = get_syntax_color(&current_token, lang);
+                spans.push(Span::styled(
+                    current_token.clone(),
+                    Style::default().fg(color),
+                ));
+                current_token.clear();
+            }
+            in_comment = true;
+            // Include the // in the comment
+            let comment_text: String = chars[i..].iter().collect();
+            spans.push(Span::styled(
+                comment_text,
+                Style::default().fg(Color::DarkGray),
+            ));
+            break;
+        } else if comment_style == "#" && ch == '#' {
+            // Found # comment
+            if !current_token.is_empty() {
+                let color = get_syntax_color(&current_token, lang);
+                spans.push(Span::styled(
+                    current_token.clone(),
+                    Style::default().fg(color),
+                ));
+                current_token.clear();
+            }
+            in_comment = true;
+            // Include the # and rest of line in the comment
+            let comment_text: String = chars[i..].iter().collect();
+            spans.push(Span::styled(
+                comment_text,
+                Style::default().fg(Color::DarkGray),
+            ));
+            break;
         } else if ch.is_whitespace() || "(){}[];,:".contains(ch) {
             if !current_token.is_empty() {
                 let color = get_syntax_color(&current_token, lang);
@@ -277,15 +413,19 @@ pub fn highlight_code_line(line: &str, lang: &str) -> Vec<Span<'static>> {
         } else {
             current_token.push(ch);
         }
+        
+        i += 1;
     }
 
-    if in_string || !current_token.is_empty() {
-        let color = if in_string {
-            Color::LightGreen
-        } else {
-            get_syntax_color(&current_token, lang)
-        };
+    // Handle remaining token if not in comment
+    if !in_comment && !in_string && !current_token.is_empty() {
+        let color = get_syntax_color(&current_token, lang);
         spans.push(Span::styled(current_token, Style::default().fg(color)));
+    } else if !in_comment && in_string && !current_token.is_empty() {
+        spans.push(Span::styled(
+            current_token,
+            Style::default().fg(Color::LightGreen),
+        ));
     }
 
     spans

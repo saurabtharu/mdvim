@@ -58,8 +58,12 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
             MdEvent::Start(Tag::Emphasis) => italic = true,
             MdEvent::End(TagEnd::Emphasis) => italic = false,
 
-            MdEvent::Start(Tag::Strikethrough) => strikethrough = true,
-            MdEvent::End(TagEnd::Strikethrough) => strikethrough = false,
+            MdEvent::Start(Tag::Strikethrough) => {
+                strikethrough = true;
+            }
+            MdEvent::End(TagEnd::Strikethrough) => {
+                strikethrough = false;
+            }
 
             MdEvent::Start(Tag::Superscript) => superscript = true,
             MdEvent::End(TagEnd::Superscript) => superscript = false,
@@ -335,29 +339,47 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
                         let mut modifiers = Modifier::empty();
                         let mut text_color = Color::White;
                         
+                        // Apply strikethrough modifier (but don't override color yet)
+                        if strikethrough {
+                            modifiers |= Modifier::CROSSED_OUT;
+                        }
+                        
+                        // Apply bold/italic colors (strikethrough can coexist)
                         if bold {
                             modifiers |= Modifier::BOLD;
-                            text_color = Color::Rgb(255, 218, 185);
+                            if !strikethrough {
+                                text_color = Color::Rgb(255, 218, 185);
+                            } else {
+                                // When strikethrough is active, use a muted version of bold color
+                                text_color = Color::Rgb(169, 169, 169);
+                            }
                         }
                         if italic {
                             modifiers |= Modifier::ITALIC;
                             if !bold {
-                                text_color = Color::Rgb(221, 160, 221);
+                                if !strikethrough {
+                                    text_color = Color::Rgb(221, 160, 221);
+                                } else {
+                                    // When strikethrough is active, use gray
+                                    text_color = Color::Rgb(169, 169, 169);
+                                }
                             }
                         }
-                        if strikethrough {
-                            modifiers |= Modifier::CROSSED_OUT;
+                        
+                        // If only strikethrough (no bold/italic), use gray
+                        if strikethrough && !bold && !italic {
                             text_color = Color::Rgb(169, 169, 169);
                         }
+                        
                         if superscript {
                             modifiers |= Modifier::DIM;
-                            if !strikethrough {
+                            if !strikethrough && !bold && !italic {
                                 text_color = Color::LightCyan;
                             }
                         }
                         if subscript {
                             modifiers |= Modifier::DIM;
-                            if !strikethrough && !superscript {
+                            if !strikethrough && !bold && !italic && !superscript {
                                 text_color = Color::LightMagenta;
                             }
                         }

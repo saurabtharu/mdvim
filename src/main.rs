@@ -4,6 +4,7 @@ mod syntax;
 mod ui;
 
 use std::io;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crossterm::{
     event::{
@@ -146,19 +147,30 @@ fn main() -> Result<(), io::Error> {
                 }
             }
             Event::Mouse(mouse) => {
+                let current_time_ms = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64;
+
                 match mouse.kind {
                     MouseEventKind::ScrollDown => {
-                        app.scroll_down(3);
+                        if app.focused_pane == app::FocusedPane::Preview {
+                            app.scroll_down(3);
+                        }
                     }
                     MouseEventKind::ScrollUp => {
-                        app.scroll_up(3);
+                        if app.focused_pane == app::FocusedPane::Preview {
+                            app.scroll_up(3);
+                        }
                     }
                     MouseEventKind::Down(MouseButton::Left) => {
-                        // Start dragging if click is near the divider
                         if app.show_tree {
                             let divider_x = app.last_tree_width_px;
+                            let col = mouse.column;
+                            
+                            // Check if clicking near divider for resizing
+                            let mut is_dragging = false;
                             if divider_x > 0 {
-                                let col = mouse.column;
                                 let diff = if col > divider_x {
                                     col - divider_x
                                 } else {
@@ -166,8 +178,26 @@ fn main() -> Result<(), io::Error> {
                                 };
                                 if diff <= 1 {
                                     app.begin_divider_drag();
+                                    is_dragging = true;
                                 }
                             }
+                            
+                            // Only handle focus/selection if not dragging divider
+                            if !is_dragging {
+                                // Determine which pane was clicked
+                                if col < divider_x {
+                                    // Clicked on tree view
+                                    // Tree content starts at row 2 (after border + title), so subtract 2
+                                    let tree_start_row = 2;
+                                    app.handle_tree_click(mouse.row, tree_start_row, current_time_ms);
+                                } else {
+                                    // Clicked on preview pane
+                                    app.handle_preview_click();
+                                }
+                            }
+                        } else {
+                            // Only preview visible, focus it
+                            app.handle_preview_click();
                         }
                     }
                     MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Moved => {
