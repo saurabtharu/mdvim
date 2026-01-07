@@ -6,7 +6,8 @@ use ratatui::{
     text::{Line, Span, Text},
 };
 
-use crate::syntax::highlight_code_line;
+use crate::syntax::{get_highlighter, highlight_line};
+use syntect::easy::HighlightLines;
 
 pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
     let mut options = Options::empty();
@@ -40,6 +41,7 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
     let mut in_list = false;
     let mut list_depth: usize = 0;
     let mut link_url = String::new();
+    let mut current_highlighter: Option<HighlightLines<'static>> = None;
 
     // Table state
     let mut in_table = false;
@@ -130,7 +132,7 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
                 code_block_lang = match kind {
                     CodeBlockKind::Fenced(lang) => {
                         let lang_str = lang.to_string();
-                        if !lang_str.is_empty() {
+                        let actual_lang = if !lang_str.is_empty() {
                             lines.push(Line::from(vec![
                                 Span::styled(" ┌─ ", Style::default().fg(Color::DarkGray)),
                                 Span::styled(
@@ -147,7 +149,13 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
                                 Style::default().fg(Color::DarkGray),
                             )]));
                             String::new()
+                        };
+
+                        // Initialize highlighter if we have a language
+                        if !actual_lang.is_empty() {
+                            current_highlighter = get_highlighter(&actual_lang);
                         }
+                        actual_lang
                     }
                     CodeBlockKind::Indented => {
                         lines.push(Line::from(vec![Span::styled(
@@ -162,6 +170,7 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
             MdEvent::End(TagEnd::CodeBlock) => {
                 in_code_block = false;
                 code_block_lang.clear();
+                current_highlighter = None;
                 lines.push(Line::from(vec![Span::styled(
                     " └─────",
                     Style::default().fg(Color::DarkGray),
@@ -306,8 +315,8 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
                         let mut line_spans =
                             vec![Span::styled(" │ ", Style::default().fg(Color::DarkGray))];
 
-                        if !code_block_lang.is_empty() {
-                            line_spans.extend(highlight_code_line(line, &code_block_lang));
+                        if let Some(highlighter) = &mut current_highlighter {
+                            line_spans.extend(highlight_line(line, highlighter));
                         } else {
                             line_spans.push(Span::styled(
                                 line.to_string(),
@@ -338,12 +347,12 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
                         // Build modifiers and colors based on active formatting
                         let mut modifiers = Modifier::empty();
                         let mut text_color = Color::White;
-                        
+
                         // Apply strikethrough modifier (but don't override color yet)
                         if strikethrough {
                             modifiers |= Modifier::CROSSED_OUT;
                         }
-                        
+
                         // Apply bold/italic colors (strikethrough can coexist)
                         if bold {
                             modifiers |= Modifier::BOLD;
@@ -365,12 +374,12 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
                                 }
                             }
                         }
-                        
+
                         // If only strikethrough (no bold/italic), use gray
                         if strikethrough && !bold && !italic {
                             text_color = Color::Rgb(169, 169, 169);
                         }
-                        
+
                         if superscript {
                             modifiers |= Modifier::DIM;
                             if !strikethrough && !bold && !italic {
@@ -383,7 +392,7 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
                                 text_color = Color::LightMagenta;
                             }
                         }
-                        
+
                         style = style.fg(text_color).add_modifier(modifiers);
                     }
 
