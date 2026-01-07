@@ -56,6 +56,10 @@ fn main() -> Result<(), io::Error> {
                         app.toggle_tree();
                     }
 
+                    KeyCode::Char('y') => {
+                        app.copy_selection();
+                    }
+
                     KeyCode::Char('t') => {
                         if app.last_key == Some('c') {
                             app.toggle_theme_list();
@@ -214,19 +218,50 @@ fn main() -> Result<(), io::Error> {
                                         tree_start_row,
                                         current_time_ms,
                                     );
+                                    app.clear_selection();
                                 } else {
                                     // Clicked on preview pane
                                     app.handle_preview_click();
+
+                                    let preview_x = if app.show_tree {
+                                        app.last_tree_width_px
+                                    } else {
+                                        0
+                                    };
+                                    if mouse.column >= preview_x {
+                                        let rel_col = mouse
+                                            .column
+                                            .saturating_sub(preview_x)
+                                            .saturating_sub(1);
+                                        let rel_row = mouse.row.saturating_sub(1);
+                                        app.start_selection(rel_col, rel_row);
+                                    }
                                 }
                             }
                         } else {
                             // Only preview visible, focus it
                             app.handle_preview_click();
+                            let rel_col = mouse.column.saturating_sub(1);
+                            let rel_row = mouse.row.saturating_sub(1);
+                            app.start_selection(rel_col, rel_row);
                         }
                     }
-                    MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Moved => {
+                    MouseEventKind::Drag(MouseButton::Left) => {
                         if app.dragging_divider {
                             app.set_tree_width_from_column(mouse.column);
+                        } else if app.selection.is_some() {
+                            // Update selection
+                            let preview_x = if app.show_tree {
+                                app.last_tree_width_px
+                            } else {
+                                0
+                            };
+                            if mouse.column >= preview_x {
+                                let rel_col =
+                                    mouse.column.saturating_sub(preview_x).saturating_sub(1);
+                                let rel_row = mouse.row.saturating_sub(1);
+                                app.update_selection(rel_col, rel_row);
+                            }
                         }
                     }
                     MouseEventKind::Up(MouseButton::Left) => {

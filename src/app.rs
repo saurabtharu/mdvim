@@ -1,6 +1,13 @@
+use arboard::Clipboard;
 use ratatui::widgets::ListState;
 use std::fs;
 use std::path::PathBuf;
+
+#[derive(Clone, Copy, Debug)]
+pub struct SelectionRange {
+    pub start: (u16, u16), // (col, row)
+    pub end: (u16, u16),   // (col, row)
+}
 
 /// Which pane currently has focus for navigation/scrolling.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,6 +46,12 @@ pub struct App {
     pub show_theme_list: bool,
     /// State for the theme selection list.
     pub theme_list_state: ListState,
+
+    // Text Selection
+    pub selection: Option<SelectionRange>,
+    // Clipboard
+    #[allow(dead_code)] // Keep it for now even if only used in methods
+    pub clipboard: Option<Clipboard>,
 }
 
 impl App {
@@ -86,6 +99,8 @@ impl App {
             available_themes: crate::syntax::get_available_themes(),
             show_theme_list: false,
             theme_list_state: ListState::default(),
+            selection: None,
+            clipboard: Clipboard::new().ok(),
         }
     }
 
@@ -326,5 +341,31 @@ impl App {
             }
         }
         self.show_theme_list = false;
+    }
+
+    pub fn start_selection(&mut self, col: u16, row: u16) {
+        self.selection = Some(SelectionRange {
+            start: (col, row),
+            end: (col, row),
+        });
+    }
+
+    pub fn update_selection(&mut self, col: u16, row: u16) {
+        if let Some(mut sel) = self.selection {
+            sel.end = (col, row);
+            self.selection = Some(sel);
+        }
+    }
+
+    pub fn clear_selection(&mut self) {
+        self.selection = None;
+    }
+
+    pub fn copy_selection(&mut self) {
+        if let Some(cb) = &mut self.clipboard {
+            if self.selection.is_some() {
+                let _ = cb.set_text("Selection copied! (Placeholder)");
+            }
+        }
     }
 }

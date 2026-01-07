@@ -9,7 +9,15 @@ use ratatui::{
 use crate::syntax::{get_highlighter, highlight_line};
 use syntect::easy::HighlightLines;
 
-pub fn markdown_to_ratatui(md: &str, theme_name: &str) -> Text<'static> {
+use crate::app::SelectionRange;
+
+pub fn markdown_to_ratatui(
+    md: &str,
+    theme_name: &str,
+    selection: Option<SelectionRange>,
+    scroll_offset: u16,
+    _area_rect: ratatui::layout::Rect,
+) -> Text<'static> {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_STRIKETHROUGH);
@@ -557,6 +565,111 @@ pub fn markdown_to_ratatui(md: &str, theme_name: &str) -> Text<'static> {
 
     if !spans.is_empty() {
         lines.push(Line::from(spans));
+    }
+
+    // Post-processing for selection highlighting
+    if let Some(sel) = selection {
+        let (start_col, start_row) = sel.start;
+        let (end_col, end_row) = sel.end;
+
+        // Normalize selection
+        let (s_col, s_row, e_col, e_row) =
+            if start_row < end_row || (start_row == end_row && start_col <= end_col) {
+                (start_col, start_row, end_col, end_row)
+            } else {
+                (end_col, end_row, start_col, start_row)
+            };
+
+        // Convert screen coordinates to relative line indices based on scroll_offset
+        // We know `lines` corresponds to the rendered text.
+        // We need to map viewport row to line index.
+        // Screen row `r` maps to `lines[r + scroll_offset]` ideally.
+
+        // Warning: `area_rect` gives us absolute screen coordinates, typically.
+        // But `markdown_to_ratatui` generates `Text` which is then rendered into a `Paragraph` with `scroll`.
+        // The `Paragraph` widget handles the scrolling.
+
+        // If we modify styles here, we are working on the WHOLE document.
+        // So we need to map the "visual selection" which is in screen coordinates relative to the viewport
+        // back to the local line indices.
+
+        // `s_row` is relative to the viewport top (e.g., 0 is the first visible line).
+        // So the actual line index is `s_row + scroll_offset`.
+
+        let start_line_idx = (s_row as usize).saturating_add(scroll_offset as usize);
+        let end_line_idx = (e_row as usize).saturating_add(scroll_offset as usize);
+
+        for (i, line) in lines.iter_mut().enumerate() {
+            if i >= start_line_idx && i <= end_line_idx {
+                // Determine column range for this line
+                // Determine column range for this line
+                // We need to rebuild spans with potentially modified styles.
+                // We need to rebuild spans with potentially modified styles.
+                // This is hard because a single line has multiple spans.
+                // For simplicity in this step, let's just create a new set of spans.
+
+                let mut new_spans = Vec::new();
+                let mut current_col = 0;
+
+                // Determine range of columns to highlight for this line
+                let (h_start, h_end) = if i == start_line_idx && i == end_line_idx {
+                    (s_col as usize, e_col as usize)
+                } else if i == start_line_idx {
+                    (s_col as usize, usize::MAX)
+                } else if i == end_line_idx {
+                    (0, e_col as usize)
+                } else {
+                    (0, usize::MAX)
+                };
+
+                for span in &line.spans {
+                    let content = &span.content;
+                    let width = content.chars().count(); // approximate width
+                    let span_end = current_col + width;
+
+                    if span_end <= h_start || current_col >= h_end {
+                        // Span is completely outside selection
+                        new_spans.push(span.clone());
+                    } else {
+                        // Span overlaps selection
+                        // Split span into parts: before, selected, after
+
+                        let sel_start_in_span = h_start.saturating_sub(current_col);
+                        let sel_end_in_span = h_end.saturating_sub(current_col).min(width);
+
+                        if sel_start_in_span > 0 {
+                            let text = content.chars().take(sel_start_in_span).collect::<String>();
+                            new_spans.push(Span::styled(text, span.style));
+                        }
+
+                        if sel_end_in_span > sel_start_in_span {
+                            let text = content
+                                .chars()
+                                .skip(sel_start_in_span)
+                                .take(sel_end_in_span - sel_start_in_span)
+                                .collect::<String>();
+                            // Invert colors for selection
+                            let mut style = span.style;
+                            if let Some(bg) = style.bg {
+                                style = style.fg(bg);
+                            } else {
+                                style = style.fg(Color::Black);
+                            }
+                            style = style.bg(Color::White); // Default selection color
+
+                            new_spans.push(Span::styled(text, style));
+                        }
+
+                        if width > sel_end_in_span {
+                            let text = content.chars().skip(sel_end_in_span).collect::<String>();
+                            new_spans.push(Span::styled(text, span.style));
+                        }
+                    }
+                    current_col += width;
+                }
+                *line = Line::from(new_spans);
+            }
+        }
     }
 
     Text::from(lines)

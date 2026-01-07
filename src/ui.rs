@@ -36,7 +36,14 @@ pub fn render_ui(f: &mut Frame, app: &mut App) {
         app.last_tree_width_px = area.width;
     }
 
-    let rendered = markdown_to_ratatui(&app.markdown, &app.current_theme);
+    let preview_area = chunks[if app.show_tree { 1 } else { 0 }];
+    let rendered = markdown_to_ratatui(
+        &app.markdown,
+        &app.current_theme,
+        app.selection,
+        app.scroll_offset,
+        preview_area,
+    );
     let line_count = rendered.lines.len() as u16;
 
     let viewport_height = if app.show_tree {
