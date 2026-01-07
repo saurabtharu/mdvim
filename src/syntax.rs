@@ -22,16 +22,13 @@ static THEME_SET: Lazy<ThemeSet> = Lazy::new(|| {
 pub fn get_highlighter(lang: &str, theme_name: &str) -> Option<HighlightLines<'static>> {
     let syntax = SYNTAX_SET.find_syntax_by_token(lang)?;
     let theme = THEME_SET.themes.get(theme_name).unwrap_or_else(|| {
-        THEME_SET
-            .themes
-            .get("base16-ocean.dark")
-            .unwrap_or_else(|| {
-                THEME_SET
-                    .themes
-                    .values()
-                    .next()
-                    .expect("No themes available")
-            })
+        THEME_SET.themes.get("TokyoNight").unwrap_or_else(|| {
+            THEME_SET
+                .themes
+                .values()
+                .next()
+                .expect("No themes available")
+        })
     });
     Some(HighlightLines::new(syntax, theme))
 }

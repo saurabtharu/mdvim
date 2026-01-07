@@ -1,3 +1,4 @@
+use ratatui::widgets::ListState;
 use std::fs;
 use std::path::PathBuf;
 
@@ -34,6 +35,10 @@ pub struct App {
     pub current_theme: String,
     /// List of available themes.
     pub available_themes: Vec<String>,
+    /// Whether to show the theme selection list.
+    pub show_theme_list: bool,
+    /// State for the theme selection list.
+    pub theme_list_state: ListState,
 }
 
 impl App {
@@ -77,8 +82,10 @@ impl App {
             dragging_divider: false,
             last_click_time: None,
             last_clicked_file: None,
-            current_theme: "base16-ocean.dark".to_string(),
+            current_theme: "TokyoNight".to_string(),
             available_themes: crate::syntax::get_available_themes(),
+            show_theme_list: false,
+            theme_list_state: ListState::default(),
         }
     }
 
@@ -268,14 +275,56 @@ impl App {
         self.last_clicked_file = None;
     }
 
-    pub fn next_theme(&mut self) {
-        if let Some(pos) = self
-            .available_themes
-            .iter()
-            .position(|t| t == &self.current_theme)
-        {
-            let next = (pos + 1) % self.available_themes.len();
-            self.current_theme = self.available_themes[next].clone();
+    pub fn toggle_theme_list(&mut self) {
+        self.show_theme_list = !self.show_theme_list;
+        if self.show_theme_list {
+            // Select current theme in the list
+            if let Some(pos) = self
+                .available_themes
+                .iter()
+                .position(|t| t == &self.current_theme)
+            {
+                self.theme_list_state.select(Some(pos));
+            } else {
+                self.theme_list_state.select(Some(0));
+            }
         }
+    }
+
+    pub fn next_theme_selection(&mut self) {
+        let i = match self.theme_list_state.selected() {
+            Some(i) => {
+                if i >= self.available_themes.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.theme_list_state.select(Some(i));
+    }
+
+    pub fn prev_theme_selection(&mut self) {
+        let i = match self.theme_list_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.available_themes.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.theme_list_state.select(Some(i));
+    }
+
+    pub fn confirm_theme_selection(&mut self) {
+        if let Some(i) = self.theme_list_state.selected() {
+            if let Some(theme) = self.available_themes.get(i) {
+                self.current_theme = theme.clone();
+            }
+        }
+        self.show_theme_list = false;
     }
 }

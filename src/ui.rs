@@ -1,8 +1,8 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 
 use crate::app::{App, FocusedPane};
@@ -116,4 +116,58 @@ pub fn render_ui(f: &mut Frame, app: &mut App) {
     } else {
         f.render_widget(preview, chunks[0]);
     }
+
+    // Render theme selection popup
+    if app.show_theme_list {
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Select Theme ")
+            .border_style(Style::default().fg(Color::Yellow));
+
+        let area = centered_rect(60, 40, f.area());
+        f.render_widget(Clear, area); // Clear background
+
+        let items: Vec<ListItem> = app
+            .available_themes
+            .iter()
+            .map(|t| {
+                let style = if t == &app.current_theme {
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(t.as_str()).style(style)
+            })
+            .collect();
+
+        let list = List::new(items).block(block).highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        );
+
+        f.render_stateful_widget(list, area, &mut app.theme_list_state);
+    }
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }

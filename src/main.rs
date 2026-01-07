@@ -37,6 +37,17 @@ fn main() -> Result<(), io::Error> {
             Event::Key(key) => {
                 let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 
+                if app.show_theme_list {
+                    match key.code {
+                        KeyCode::Esc => app.toggle_theme_list(),
+                        KeyCode::Enter => app.confirm_theme_selection(),
+                        KeyCode::Char('j') | KeyCode::Down => app.next_theme_selection(),
+                        KeyCode::Char('k') | KeyCode::Up => app.prev_theme_selection(),
+                        _ => {}
+                    }
+                    continue;
+                }
+
                 match key.code {
                     KeyCode::Char('q') => break,
 
@@ -47,7 +58,7 @@ fn main() -> Result<(), io::Error> {
 
                     KeyCode::Char('t') => {
                         if app.last_key == Some('c') {
-                            app.next_theme();
+                            app.toggle_theme_list();
                             app.last_key = None;
                         } else {
                             app.toggle_tree();
