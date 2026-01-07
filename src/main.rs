@@ -12,9 +12,9 @@ use crossterm::{
         MouseEventKind,
     },
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 
 use app::App;
 use ui::render_ui;
@@ -46,7 +46,16 @@ fn main() -> Result<(), io::Error> {
                     }
 
                     KeyCode::Char('t') => {
-                        app.toggle_tree();
+                        if app.last_key == Some('c') {
+                            app.next_theme();
+                            app.last_key = None;
+                        } else {
+                            app.toggle_tree();
+                        }
+                    }
+
+                    KeyCode::Char('c') => {
+                        app.last_key = Some('c');
                     }
 
                     // Focus movement: Ctrl+h (tree), Ctrl+l (preview)
@@ -167,7 +176,7 @@ fn main() -> Result<(), io::Error> {
                         if app.show_tree {
                             let divider_x = app.last_tree_width_px;
                             let col = mouse.column;
-                            
+
                             // Check if clicking near divider for resizing
                             let mut is_dragging = false;
                             if divider_x > 0 {
@@ -181,7 +190,7 @@ fn main() -> Result<(), io::Error> {
                                     is_dragging = true;
                                 }
                             }
-                            
+
                             // Only handle focus/selection if not dragging divider
                             if !is_dragging {
                                 // Determine which pane was clicked
@@ -189,7 +198,11 @@ fn main() -> Result<(), io::Error> {
                                     // Clicked on tree view
                                     // Tree content starts at row 2 (after border + title), so subtract 2
                                     let tree_start_row = 2;
-                                    app.handle_tree_click(mouse.row, tree_start_row, current_time_ms);
+                                    app.handle_tree_click(
+                                        mouse.row,
+                                        tree_start_row,
+                                        current_time_ms,
+                                    );
                                 } else {
                                     // Clicked on preview pane
                                     app.handle_preview_click();

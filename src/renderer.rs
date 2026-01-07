@@ -9,7 +9,7 @@ use ratatui::{
 use crate::syntax::{get_highlighter, highlight_line};
 use syntect::easy::HighlightLines;
 
-pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
+pub fn markdown_to_ratatui(md: &str, theme_name: &str) -> Text<'static> {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_STRIKETHROUGH);
@@ -153,7 +153,7 @@ pub fn markdown_to_ratatui(md: &str) -> Text<'static> {
 
                         // Initialize highlighter if we have a language
                         if !actual_lang.is_empty() {
-                            current_highlighter = get_highlighter(&actual_lang);
+                            current_highlighter = get_highlighter(&actual_lang, theme_name);
                         }
                         actual_lang
                     }

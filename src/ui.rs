@@ -1,8 +1,8 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-    Frame,
 };
 
 use crate::app::{App, FocusedPane};
@@ -16,7 +16,10 @@ pub fn render_ui(f: &mut Frame, app: &mut App) {
         let preview = 100u16.saturating_sub(tree);
         Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(tree), Constraint::Percentage(preview)])
+            .constraints([
+                Constraint::Percentage(tree),
+                Constraint::Percentage(preview),
+            ])
             .split(area)
     } else {
         Layout::default()
@@ -33,7 +36,7 @@ pub fn render_ui(f: &mut Frame, app: &mut App) {
         app.last_tree_width_px = area.width;
     }
 
-    let rendered = markdown_to_ratatui(&app.markdown);
+    let rendered = markdown_to_ratatui(&app.markdown, &app.current_theme);
     let line_count = rendered.lines.len() as u16;
 
     let viewport_height = if app.show_tree {

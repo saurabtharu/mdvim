@@ -30,6 +30,10 @@ pub struct App {
     pub last_click_time: Option<u64>,
     /// Last clicked file index for double-click detection.
     pub last_clicked_file: Option<usize>,
+    /// Current syntax highlighting theme.
+    pub current_theme: String,
+    /// List of available themes.
+    pub available_themes: Vec<String>,
 }
 
 impl App {
@@ -39,11 +43,19 @@ impl App {
             .filter_map(|e| e.ok())
             .map(|e| e.path())
             .collect();
-        
+
         // Sort files by name (case-insensitive)
         files.sort_by(|a, b| {
-            let a_name = a.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
-            let b_name = b.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+            let a_name = a
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_lowercase();
+            let b_name = b
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_lowercase();
             a_name.cmp(&b_name)
         });
 
@@ -65,6 +77,8 @@ impl App {
             dragging_divider: false,
             last_click_time: None,
             last_clicked_file: None,
+            current_theme: "base16-ocean.dark".to_string(),
+            available_themes: crate::syntax::get_available_themes(),
         }
     }
 
@@ -214,10 +228,15 @@ impl App {
     }
 
     /// Handle mouse click on file tree
-    pub fn handle_tree_click(&mut self, row: u16, tree_start_row: u16, current_time_ms: u64) -> bool {
+    pub fn handle_tree_click(
+        &mut self,
+        row: u16,
+        tree_start_row: u16,
+        current_time_ms: u64,
+    ) -> bool {
         // Focus tree view
         self.focus_tree();
-        
+
         // Check if clicking on a file
         if let Some(index) = self.get_file_index_at_row(row, tree_start_row) {
             // Check for double-click (within 500ms and same file)
@@ -233,7 +252,7 @@ impl App {
                     }
                 }
             }
-            
+
             // Single click - select file
             self.select_file_by_index(index);
             self.last_click_time = Some(current_time_ms);
@@ -245,8 +264,18 @@ impl App {
     /// Handle mouse click on preview pane
     pub fn handle_preview_click(&mut self) {
         self.focus_preview();
-        // Reset double-click tracking when clicking preview
         self.last_click_time = None;
         self.last_clicked_file = None;
+    }
+
+    pub fn next_theme(&mut self) {
+        if let Some(pos) = self
+            .available_themes
+            .iter()
+            .position(|t| t == &self.current_theme)
+        {
+            let next = (pos + 1) % self.available_themes.len();
+            self.current_theme = self.available_themes[next].clone();
+        }
     }
 }

@@ -19,9 +19,27 @@ static THEME_SET: Lazy<ThemeSet> = Lazy::new(|| {
     theme_set
 });
 
-pub fn get_highlighter(lang: &str) -> Option<HighlightLines<'static>> {
+pub fn get_highlighter(lang: &str, theme_name: &str) -> Option<HighlightLines<'static>> {
     let syntax = SYNTAX_SET.find_syntax_by_token(lang)?;
-    Some(HighlightLines::new(syntax, &THEME_SET.themes["TokyoNight"]))
+    let theme = THEME_SET.themes.get(theme_name).unwrap_or_else(|| {
+        THEME_SET
+            .themes
+            .get("base16-ocean.dark")
+            .unwrap_or_else(|| {
+                THEME_SET
+                    .themes
+                    .values()
+                    .next()
+                    .expect("No themes available")
+            })
+    });
+    Some(HighlightLines::new(syntax, theme))
+}
+
+pub fn get_available_themes() -> Vec<String> {
+    let mut themes: Vec<String> = THEME_SET.themes.keys().cloned().collect();
+    themes.sort();
+    themes
 }
 
 pub fn highlight_line(line: &str, highlighter: &mut HighlightLines) -> Vec<Span<'static>> {
